@@ -16,19 +16,40 @@ export default function HlsPlayer({ src, poster, autoPlay, isLive }: Props) {
     if (!videoRef.current || !src) return;
 
     let hls: import('hls.js').default | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
 
-    (async () => {
+    const load = async () => {
+      if (destroyed) return;
+
       const Hls = (await import('hls.js')).default;
+
       if (Hls.isSupported() && videoRef.current) {
+        hls?.destroy();
         hls = new Hls({ enableWorker: true, lowLatencyMode: true });
         hls.loadSource(src);
         hls.attachMedia(videoRef.current);
+
+        hls.on(Hls.Events.ERROR, (_e, data) => {
+          if (data.fatal && !destroyed) {
+            hls?.destroy();
+            hls = null;
+            // Повторить через 3 секунды
+            retryTimer = setTimeout(load, 3000);
+          }
+        });
       } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
         videoRef.current.src = src;
       }
-    })();
+    };
 
-    return () => { hls?.destroy(); };
+    load();
+
+    return () => {
+      destroyed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      hls?.destroy();
+    };
   }, [src]);
 
   return (
