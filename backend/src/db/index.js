@@ -16,7 +16,8 @@ pool.on('connect', (client) => {
 pool.connect((err, client, release) => {
   if (err) {
     console.error('Ошибка подключения к PostgreSQL:', err.message);
-    process.exit(1);
+    console.error('БД недоступна — auth и user роуты не будут работать');
+    return;
   }
   console.log('PostgreSQL подключён успешно');
   release();
