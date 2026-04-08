@@ -15,17 +15,23 @@ const io = new Server(server, {
   },
 });
 
+const messageHistory = [];
+const MAX_HISTORY = 50;
+
 io.on('connection', (socket) => {
-  // Отправить текущий статус сразу при подключении
+  // Отправить текущий статус и историю чата при подключении
   socket.emit('stream:status', getStreamStatus());
+  socket.emit('chat:history', messageHistory);
 
   socket.on('chat:message', (data) => {
-    // Рассылаем всем включая отправителя
-    io.emit('chat:message', {
+    const msg = {
       name: data.name || 'Аноним',
       text: data.text,
       time: new Date().toISOString(),
-    });
+    };
+    messageHistory.push(msg);
+    if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
+    io.emit('chat:message', msg);
   });
 });
 
