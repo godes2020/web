@@ -12,7 +12,7 @@ function getStreamStatus() {
   return { online: streamOnline, startedAt: streamStartedAt };
 }
 
-function startStreamServer() {
+function startStreamServer(io) {
   const STREAM_KEY = process.env.STREAM_KEY;
   const RTMP_PORT = parseInt(process.env.RTMP_PORT, 10) || 1935;
 
@@ -54,6 +54,7 @@ function startStreamServer() {
     console.log(`[RTMP] Трансляция начата (${session.streamPath})`);
     streamOnline = true;
     streamStartedAt = new Date().toISOString();
+    io.emit('stream:status', { online: true, startedAt: streamStartedAt });
     startFFmpeg(RTMP_PORT, key);
   });
 
@@ -61,6 +62,7 @@ function startStreamServer() {
     console.log(`[RTMP] Трансляция завершена (${session.streamPath})`);
     streamOnline = false;
     streamStartedAt = null;
+    io.emit('stream:status', { online: false, startedAt: null });
     stopFFmpeg();
   });
 
