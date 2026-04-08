@@ -5,6 +5,12 @@ const fs = require('fs');
 
 const MEDIA_DIR = path.join(__dirname, '../../media/live');
 let ffmpegProcess = null;
+let streamOnline = false;
+let streamStartedAt = null;
+
+function getStreamStatus() {
+  return { online: streamOnline, startedAt: streamStartedAt };
+}
 
 function startStreamServer() {
   const STREAM_KEY = process.env.STREAM_KEY;
@@ -46,11 +52,15 @@ function startStreamServer() {
     }
 
     console.log(`[RTMP] Трансляция начата (${session.streamPath})`);
+    streamOnline = true;
+    streamStartedAt = new Date().toISOString();
     startFFmpeg(RTMP_PORT, key);
   });
 
   nms.on('donePublish', (session) => {
     console.log(`[RTMP] Трансляция завершена (${session.streamPath})`);
+    streamOnline = false;
+    streamStartedAt = null;
     stopFFmpeg();
   });
 
@@ -126,4 +136,4 @@ function cleanMediaDir() {
   }
 }
 
-module.exports = { startStreamServer };
+module.exports = { startStreamServer, getStreamStatus };
