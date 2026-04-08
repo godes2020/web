@@ -10,18 +10,24 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN,
+    origin: (process.env.CORS_ORIGIN || '').replace(/\/$/, ''),
     methods: ['GET', 'POST'],
   },
 });
 
 const messageHistory = [];
 const MAX_HISTORY = 50;
+let viewerCount = 0;
+
+const broadcastViewers = () => io.emit('stream:viewers', { count: viewerCount });
 
 io.on('connection', (socket) => {
-  // Отправить текущий статус и историю чата при подключении
+  viewerCount++;
+  broadcastViewers();
+
   socket.emit('stream:status', getStreamStatus());
   socket.emit('chat:history', messageHistory);
+  socket.emit('stream:viewers', { count: viewerCount });
 
   socket.on('chat:message', (data) => {
     const msg = {
@@ -32,6 +38,11 @@ io.on('connection', (socket) => {
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
     io.emit('chat:message', msg);
+  });
+
+  socket.on('disconnect', () => {
+    viewerCount = Math.max(0, viewerCount - 1);
+    broadcastViewers();
   });
 });
 

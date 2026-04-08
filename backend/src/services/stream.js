@@ -78,12 +78,18 @@ function startFFmpeg(rtmpPort, key) {
 
   const args = [
     '-i', inputUrl,
-    '-c:v', 'copy',
+    // Видео: принудительный keyframe каждую секунду — чтобы сегменты резались ровно
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',   // минимальная задержка кодирования
+    '-tune', 'zerolatency',   // оптимизация для live
+    '-g', '30',               // keyframe каждые 30 кадров (≈1 сек при 30fps)
+    '-sc_threshold', '0',     // не резать по смене сцены
     '-c:a', 'aac',
+    '-ar', '44100',
     '-f', 'hls',
-    '-hls_time', '4',
-    '-hls_list_size', '6',
-    '-hls_flags', 'delete_segments',
+    '-hls_time', '1',         // 1 сек сегменты — минимальная задержка старта
+    '-hls_list_size', '6',    // 6 сегментов в плейлисте = 6 сек окно
+    '-hls_flags', 'delete_segments+split_by_time',
     outputPath,
   ];
 

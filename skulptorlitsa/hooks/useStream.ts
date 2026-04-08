@@ -10,7 +10,8 @@ interface StreamStatus {
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
 export function useStream() {
-  const [status, setStatus] = useState<StreamStatus>({ online: false, startedAt: null });
+  const [status, setStatus]   = useState<StreamStatus>({ online: false, startedAt: null });
+  const [viewers, setViewers] = useState(0);
 
   useEffect(() => {
     let socket: import('socket.io-client').Socket | null = null;
@@ -19,15 +20,12 @@ export function useStream() {
       const { io } = await import('socket.io-client');
       socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
 
-      socket.on('stream:status', (data: StreamStatus) => {
-        setStatus(data);
-      });
+      socket.on('stream:status',  (data: StreamStatus)      => setStatus(data));
+      socket.on('stream:viewers', (data: { count: number }) => setViewers(data.count));
     })();
 
-    return () => {
-      socket?.disconnect();
-    };
+    return () => { socket?.disconnect(); };
   }, []);
 
-  return status;
+  return { ...status, viewers };
 }

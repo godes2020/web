@@ -22,7 +22,7 @@ export default function ChatBox({ online }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const socketRef = useRef<import('socket.io-client').Socket | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   // Восстановить имя из localStorage
   useEffect(() => {
@@ -65,9 +65,10 @@ export default function ChatBox({ online }: Props) {
     };
   }, [name, online]);
 
-  // Автоскролл вниз
+  // Автоскролл вниз — скроллим только сам контейнер, а не страницу
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   const saveName = () => {
@@ -78,7 +79,8 @@ export default function ChatBox({ online }: Props) {
     setNameInput('');
   };
 
-  const send = () => {
+  const send = (e?: React.KeyboardEvent | React.MouseEvent) => {
+    e?.preventDefault();
     if (!input.trim() || !socketRef.current) return;
     socketRef.current.emit('chat:message', { name, text: input.trim() });
     setInput('');
@@ -116,7 +118,7 @@ export default function ChatBox({ online }: Props) {
 
       {/* Сообщения */}
       {name && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px] max-h-[400px]">
+        <div ref={messagesRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px] max-h-[400px]">
           {messages.length === 0 && (
             <p className="text-sm text-gray-500 text-center mt-4">
               {online ? 'Пока нет сообщений. Напишите первым!' : ''}
@@ -141,7 +143,6 @@ export default function ChatBox({ online }: Props) {
               </div>
             </div>
           ))}
-          <div ref={bottomRef} />
         </div>
       )}
 
@@ -153,7 +154,7 @@ export default function ChatBox({ online }: Props) {
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && send()}
+                onKeyDown={e => { if (e.key === 'Enter') send(e); }}
                 placeholder="Написать сообщение..."
                 maxLength={300}
                 className="flex-1 border border-gray-300 rounded-lg px-3 py-2
@@ -161,7 +162,7 @@ export default function ChatBox({ online }: Props) {
                            bg-white min-h-[44px]"
               />
               <button
-                onClick={send}
+                onClick={e => send(e)}
                 className="bg-[#33783e] text-white px-4 py-2 rounded-lg
                            hover:bg-[#2a6234] transition-colors text-sm font-medium min-h-[44px]"
               >
