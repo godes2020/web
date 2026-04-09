@@ -63,7 +63,7 @@ export default function StreamPage({ params }: Props) {
               />
             </div>
             <div className="h-[500px] lg:h-auto">
-              <ChatBox streamId={stream.id} />
+              <ChatBox online={stream.status === 'live'} />
             </div>
           </div>
         )}
@@ -72,7 +72,7 @@ export default function StreamPage({ params }: Props) {
         {stream.status === 'upcoming' && (
           <div className="max-w-md mx-auto">
             <h3 className="font-semibold mb-3">Чат трансляции</h3>
-            <ChatBox streamId={stream.id} />
+            <ChatBox online={stream.status === 'live'} />
           </div>
         )}
       </div>
