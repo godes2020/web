@@ -73,6 +73,11 @@ function startStreamServer(io) {
 function startFFmpeg(rtmpPort, key) {
   stopFFmpeg(); // на случай если предыдущий процесс не был остановлен
 
+  // Дать время pkill завершить работу прежде чем запускать новый процесс
+  setTimeout(() => _spawnFFmpeg(rtmpPort, key), 500);
+}
+
+function _spawnFFmpeg(rtmpPort, key) {
   const outputPath = path.join(MEDIA_DIR, 'stream.m3u8');
   const inputUrl = `rtmp://127.0.0.1:${rtmpPort}/live/${key}`;
 
