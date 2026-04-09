@@ -13,6 +13,13 @@ interface Message {
   text:    string;
   time:    string;
   replyTo: ReplyTo | null;
+  status:  'confirmed' | 'pending' | 'failed';
+  nonce?:  string;
+}
+
+interface PendingItem {
+  nonce:   string;
+  payload: { name: string; text: string; replyTo: ReplyTo | null; nonce: string };
 }
 
 interface Props {
@@ -21,6 +28,7 @@ interface Props {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 const NAME_KEY    = 'chat_name';
+const FAIL_AFTER  = 15_000; // ms
 
 function IconReply() {
   return (
@@ -41,6 +49,27 @@ function IconClose() {
   );
 }
 
+function IconClock() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function IconFailed() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
 export default function ChatBox({ online }: Props) {
   const [name, setName]           = useState('');
   const [nameInput, setNameInput] = useState('');
@@ -52,11 +81,15 @@ export default function ChatBox({ online }: Props) {
   const socketRef   = useRef<import('socket.io-client').Socket | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef    = useRef<HTMLInputElement>(null);
+  const pendingRef  = useRef<PendingItem[]>([]);
+  const nameRef     = useRef('');
 
   useEffect(() => {
     const saved = localStorage.getItem(NAME_KEY);
     if (saved) setName(saved);
   }, []);
+
+  useEffect(() => { nameRef.current = name; }, [name]);
 
   useEffect(() => {
     if (!name || !online) {
@@ -72,17 +105,51 @@ export default function ChatBox({ online }: Props) {
 
       const toMsg = (data: {
         name: string; text: string; time: string;
-        replyTo?: ReplyTo | null;
+        replyTo?: ReplyTo | null; nonce?: string | null;
       }): Message => ({
         id:      `${data.time}-${Math.random()}`,
         name:    data.name,
         text:    data.text,
         time:    new Date(data.time).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }),
         replyTo: data.replyTo || null,
+        status:  'confirmed',
+        nonce:   data.nonce   || undefined,
       });
 
-      socket.on('chat:history', (history: any[]) => setMessages(history.map(toMsg)));
-      socket.on('chat:message', (data: any)       => setMessages(prev => [...prev, toMsg(data)]));
+      // Reconnect — resend pending queue
+      socket.on('connect', () => {
+        pendingRef.current.forEach(({ payload }) => socket.emit('chat:message', payload));
+      });
+
+      socket.on('chat:history', (history: any[]) => {
+        // Find nonces already confirmed by server — remove from pending queue
+        const historyNonces = new Set(
+          history.map((m: any) => m.nonce).filter(Boolean)
+        );
+        pendingRef.current = pendingRef.current.filter(({ nonce }) => !historyNonces.has(nonce));
+
+        setMessages(prev => [
+          ...history.map(toMsg),
+          ...prev.filter(m => m.status !== 'confirmed'),
+        ]);
+      });
+
+      socket.on('chat:message', (data: any) => {
+        // Check if this is confirmation of our pending message
+        if (data.nonce) {
+          const idx = pendingRef.current.findIndex(p => p.nonce === data.nonce);
+          if (idx !== -1) {
+            pendingRef.current.splice(idx, 1);
+            setMessages(prev => prev.map(m =>
+              m.nonce === data.nonce
+                ? { ...toMsg(data), id: m.id } // keep same id to avoid flicker
+                : m
+            ));
+            return;
+          }
+        }
+        setMessages(prev => [...prev, toMsg(data)]);
+      });
     })();
 
     return () => { socketRef.current?.disconnect(); socketRef.current = null; };
@@ -109,12 +176,65 @@ export default function ChatBox({ online }: Props) {
 
   const cancelReply = () => setReplyTo(null);
 
+  const emitMessage = (payload: PendingItem['payload']) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('chat:message', payload);
+    }
+  };
+
   const send = (e?: React.KeyboardEvent | React.MouseEvent) => {
     e?.preventDefault();
-    if (!input.trim() || !socketRef.current) return;
-    socketRef.current.emit('chat:message', { name, text: input.trim(), replyTo });
+    const text = input.trim();
+    if (!text) return;
+
+    const nonce   = crypto.randomUUID();
+    const payload = { name: nameRef.current, text, replyTo, nonce };
+    const localId = `pending-${nonce}`;
+
+    const pendingMsg: Message = {
+      id:      localId,
+      name:    nameRef.current,
+      text,
+      time:    new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }),
+      replyTo,
+      status:  'pending',
+      nonce,
+    };
+
+    pendingRef.current.push({ nonce, payload });
+    setMessages(prev => [...prev, pendingMsg]);
     setInput('');
     setReplyTo(null);
+
+    emitMessage(payload);
+
+    // Timeout: pending → failed after 15s
+    setTimeout(() => {
+      setMessages(prev => prev.map(m =>
+        m.nonce === nonce && m.status === 'pending'
+          ? { ...m, status: 'failed' }
+          : m
+      ));
+    }, FAIL_AFTER);
+  };
+
+  const retry = (msg: Message) => {
+    if (!msg.nonce) return;
+    const item = pendingRef.current.find(p => p.nonce === msg.nonce);
+    if (!item) return;
+
+    setMessages(prev => prev.map(m =>
+      m.nonce === msg.nonce ? { ...m, status: 'pending' } : m
+    ));
+    emitMessage(item.payload);
+
+    setTimeout(() => {
+      setMessages(prev => prev.map(m =>
+        m.nonce === msg.nonce && m.status === 'pending'
+          ? { ...m, status: 'failed' }
+          : m
+      ));
+    }, FAIL_AFTER);
   };
 
   const isMine = (m: Message) => m.name === name;
@@ -163,6 +283,7 @@ export default function ChatBox({ online }: Props) {
             <div
               key={m.id}
               className={`flex gap-2 group ${isMine(m) ? 'flex-row-reverse' : ''}`}
+              style={{ opacity: m.status !== 'confirmed' ? 0.65 : 1, transition: 'opacity 0.2s' }}
               onMouseEnter={() => setHoveredId(m.id)}
               onMouseLeave={() => setHoveredId(null)}
             >
@@ -187,8 +308,7 @@ export default function ChatBox({ online }: Props) {
                   {m.replyTo && (
                     <div style={{
                       borderLeft: `3px solid ${isMine(m) ? 'rgba(255,255,255,0.5)' : '#33783e'}`,
-                      paddingLeft: 8, marginBottom: 6,
-                      opacity: 0.85,
+                      paddingLeft: 8, marginBottom: 6, opacity: 0.85,
                     }}>
                       <p style={{
                         fontSize: 11, fontWeight: 700, marginBottom: 2,
@@ -209,10 +329,38 @@ export default function ChatBox({ online }: Props) {
 
                   {m.text}
                 </div>
+
+                {/* Статус pending / failed */}
+                {m.status === 'pending' && (
+                  <span style={{
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    fontSize: 10, color: '#999', marginTop: 3,
+                  }}>
+                    <IconClock /> Отправляется...
+                  </span>
+                )}
+                {m.status === 'failed' && (
+                  <span style={{
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    fontSize: 10, color: '#e53e3e', marginTop: 3,
+                  }}>
+                    <IconFailed /> Не доставлено ·{' '}
+                    <button
+                      onClick={() => retry(m)}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        cursor: 'pointer', color: '#e53e3e', fontSize: 10,
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Повторить
+                    </button>
+                  </span>
+                )}
               </div>
 
-              {/* Кнопка "Ответить" — появляется при наведении */}
-              {online && (
+              {/* Кнопка "Ответить" */}
+              {online && m.status === 'confirmed' && (
                 <button
                   onClick={() => startReply(m)}
                   style={{
@@ -243,10 +391,8 @@ export default function ChatBox({ online }: Props) {
           {replyTo && (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 12px',
-              background: '#f5f5f5',
-              borderBottom: '1px solid #e5e5e5',
-              gap: 8,
+              padding: '8px 12px', background: '#f5f5f5',
+              borderBottom: '1px solid #e5e5e5', gap: 8,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 <div style={{ width: 3, height: 32, background: '#33783e', borderRadius: 2, flexShrink: 0 }} />
