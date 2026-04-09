@@ -123,10 +123,13 @@ function startFFmpeg(rtmpPort, key) {
 
 function stopFFmpeg() {
   if (ffmpegProcess) {
-    ffmpegProcess.kill('SIGTERM');
+    ffmpegProcess.kill('SIGKILL');
     ffmpegProcess = null;
     console.log('[FFmpeg] Транскодинг остановлен');
   }
+
+  // Страховка: убить все зависшие ffmpeg-процессы
+  try { spawn('pkill', ['-9', '-f', 'stream.m3u8'], { stdio: 'ignore' }); } catch {}
 
   // Очистить старые сегменты
   cleanMediaDir();
