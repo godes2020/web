@@ -31,7 +31,7 @@ export default function ProfilePage() {
     if (!isAuthenticated) { router.push('/login'); return; }
     if (user) {
       setName(user.name || '');
-      setAvatarUrl(user.avatar_url || null);
+      setAvatarUrl(user.avatar || null);
     }
   }, [user, isAuthenticated, router]);
 
@@ -88,10 +88,10 @@ export default function ProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const fullUrl = `http://localhost:4000${data.user.avatar_url}`;
+      const fullUrl = `http://localhost:4000${data.user.avatar}`;
       setAvatarUrl(fullUrl);
-      login(getJwt()!, { ...data.user, avatar_url: fullUrl });
-      localStorage.setItem('user', JSON.stringify({ ...data.user, avatar_url: fullUrl }));
+      login(getJwt()!, { ...data.user, avatar: fullUrl });
+      localStorage.setItem('user', JSON.stringify({ ...data.user, avatar: fullUrl }));
       toast.success('Аватар обновлён');
     } catch (e: any) {
       toast.error(e.message || 'Ошибка загрузки');
