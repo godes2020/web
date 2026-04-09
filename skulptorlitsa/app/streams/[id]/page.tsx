@@ -72,7 +72,7 @@ export default function StreamPage({ params }: Props) {
         {stream.status === 'upcoming' && (
           <div className="max-w-md mx-auto">
             <h3 className="font-semibold mb-3">Чат трансляции</h3>
-            <ChatBox online={stream.status === 'live'} />
+            <ChatBox online={false} />
           </div>
         )}
       </div>
