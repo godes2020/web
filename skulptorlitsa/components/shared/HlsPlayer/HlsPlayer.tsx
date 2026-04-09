@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+declare global {
+  interface Navigator {
+    getAutoplayPolicy?: (type: 'mediaelement' | 'audiocontext' | 'query') => 'allowed' | 'allowed-muted' | 'disallowed';
+  }
+}
+
 interface Props {
   src: string;
   poster?: string;
@@ -9,24 +15,18 @@ interface Props {
   isLive?: boolean;
 }
 
-const VOL_KEY   = 'player_volume';
-const MUTED_KEY = 'player_muted';
+const VOL_KEY = 'player_volume';
 
-function loadVolPrefs() {
+function loadVol(): number {
   try {
-    const rawVol   = localStorage.getItem(VOL_KEY);
-    const rawMuted = localStorage.getItem(MUTED_KEY);
-    const vol      = rawVol !== null ? parseFloat(rawVol) : 1;
-    const muted    = rawMuted !== null ? rawMuted === 'true' : false; // default: unmuted
-    return { vol: isNaN(vol) ? 1 : Math.min(1, Math.max(0, vol)), muted };
-  } catch { return { vol: 1, muted: false }; }
+    const raw = localStorage.getItem(VOL_KEY);
+    const v   = raw !== null ? parseFloat(raw) : 1;
+    return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
+  } catch { return 1; }
 }
 
-function saveVolPrefs(vol: number, muted: boolean) {
-  try {
-    localStorage.setItem(VOL_KEY,   String(vol));
-    localStorage.setItem(MUTED_KEY, String(muted));
-  } catch {}
+function saveVol(vol: number) {
+  try { localStorage.setItem(VOL_KEY, String(vol)); } catch {}
 }
 
 export default function HlsPlayer({ src, poster, isLive }: Props) {
@@ -35,62 +35,68 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
 
   const [playing, setPlaying]       = useState(false);
   const [volume, setVolume]         = useState(1);
-  const [muted, setMuted]           = useState(true);
-  const [needClick, setNeedClick]   = useState(false); // autoplay completely blocked
-  const [showUnmute, setShowUnmute] = useState(false); // muted but playing
+  const [muted, setMuted]           = useState(false);
+  const [needClick, setNeedClick]   = useState(false);
+  const [showUnmute, setShowUnmute] = useState(false);
   const [isPip, setIsPip]           = useState(false);
   const [isFs, setIsFs]             = useState(false);
 
-  // ── Restore volume from localStorage on mount ────────────────────────────────
+  const volumeRef     = useRef(1);
+  const userPausedRef = useRef(false);
+
+  // ── Restore volume from localStorage on mount ─────────────────────────────
   useEffect(() => {
-    const { vol } = loadVolPrefs();
-    setVolume(vol > 0 ? vol : 1);
+    const vol = loadVol();
+    volumeRef.current = vol;
+    setVolume(vol);
   }, []);
 
-  // ── Load HLS ─────────────────────────────────────────────────────────────────
+  // ── Load HLS ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
 
     let hls: import('hls.js').default | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let hlsRetryTimer:  ReturnType<typeof setTimeout>  | null = null;
+    let playRetryTimer: ReturnType<typeof setTimeout>  | null = null;
+    let keepAlive:      ReturnType<typeof setInterval> | null = null;
     let destroyed = false;
 
-    let hlsReady  = false;
-    let keepAlive: ReturnType<typeof setInterval> | null = null;
-
-    const applyVolume = () => {
-      const { vol, muted: wasMuted } = loadVolPrefs();
-      const restoredVol = vol > 0 ? vol : 1;
-      video.volume = restoredVol;
-      setVolume(restoredVol);
-      if (wasMuted) {
-        video.muted = true; setMuted(true); setShowUnmute(false);
-      } else {
-        video.muted = false;
-        if (!video.muted) { setMuted(false); setShowUnmute(false); }
-        else               { setMuted(true);  setShowUnmute(true); }
-      }
-    };
+    // Chrome 116+: check once if unmuted autoplay is allowed (MEI накоплен)
+    const canPlayUnmuted =
+      typeof navigator.getAutoplayPolicy === 'function' &&
+      navigator.getAutoplayPolicy('mediaelement') === 'allowed';
 
     const startPlay = () => {
-      if (destroyed || !video || !hlsReady) return;
-      video.muted = true;
-      video.play()
-        .then(() => { if (!destroyed) { setNeedClick(false); applyVolume(); } })
-        .catch(() => { /* keepAlive will retry */ });
-    };
+      if (destroyed || !video) return;
 
-    // KeepAlive: every second — if paused and HLS is ready, try play again
-    const startKeepAlive = () => {
-      if (keepAlive) clearInterval(keepAlive);
-      keepAlive = setInterval(() => {
-        if (destroyed) { clearInterval(keepAlive!); return; }
-        if (hlsReady && video.paused) {
-          video.muted = true;
-          video.play().catch(() => {});
-        }
-      }, 1000);
+      video.volume = volumeRef.current;
+      video.muted  = !canPlayUnmuted;
+
+      const tryPlay = () => {
+        if (destroyed) return;
+        video.play()
+          .then(() => {
+            if (destroyed) return;
+            setNeedClick(false);
+            if (canPlayUnmuted) {
+              setMuted(false); setShowUnmute(false); setVolume(volumeRef.current);
+            } else {
+              setMuted(true); setShowUnmute(true);
+            }
+            // Resume playback after stream stalls — but never override user pause
+            if (keepAlive) clearInterval(keepAlive);
+            keepAlive = setInterval(() => {
+              if (destroyed) { clearInterval(keepAlive!); return; }
+              if (video.paused && !userPausedRef.current) video.play().catch(() => {});
+            }, 5000);
+          })
+          .catch(() => {
+            if (!destroyed) playRetryTimer = setTimeout(tryPlay, 1000);
+          });
+      };
+
+      tryPlay();
     };
 
     const load = async () => {
@@ -101,45 +107,41 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
       if (Hls.isSupported() && videoRef.current) {
         hls?.destroy();
         hls = new Hls({
-          enableWorker:            true,
-          lowLatencyMode:          false,
-          startPosition:           -1,
-          initialLiveManifestSize: 1,
-          liveBackBufferLength:    2,
-          maxBufferLength:         4,
-          maxMaxBufferLength:      8,
-          liveSyncDurationCount:   2,
+          enableWorker:                true,
+          lowLatencyMode:              false,
+          startPosition:               -1,
+          initialLiveManifestSize:     1,
+          liveBackBufferLength:        2,
+          maxBufferLength:             4,
+          maxMaxBufferLength:          8,
+          liveSyncDurationCount:       2,
           liveMaxLatencyDurationCount: 4,
-          startFragPrefetch:       true,
+          startFragPrefetch:           true,
         });
         hls.loadSource(src);
         hls.attachMedia(videoRef.current);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (destroyed) return;
-          hlsReady = true;
           startPlay();
-          startKeepAlive();
         });
 
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (data.fatal && !destroyed) {
-            hlsReady = false;
             hls?.destroy(); hls = null;
-            retryTimer = setTimeout(load, 3000);
+            hlsRetryTimer = setTimeout(load, 3000);
           }
         });
       } else if (videoRef.current?.canPlayType('application/vnd.apple.mpegurl')) {
         videoRef.current.src = src;
-        hlsReady = true;
         videoRef.current.addEventListener('loadedmetadata', () => {
-          startPlay(); startKeepAlive();
+          startPlay();
         }, { once: true });
       }
     };
 
-    const onPlay  = () => { setPlaying(true); setNeedClick(false); };
-    const onPause = () => setPlaying(false);
+    const onPlay  = () => { setPlaying(true);  setNeedClick(false); };
+    const onPause = () => { setPlaying(false); };
     video.addEventListener('play',  onPlay);
     video.addEventListener('pause', onPause);
 
@@ -147,15 +149,16 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
 
     return () => {
       destroyed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (keepAlive)  clearInterval(keepAlive);
+      if (hlsRetryTimer)  clearTimeout(hlsRetryTimer);
+      if (playRetryTimer) clearTimeout(playRetryTimer);
+      if (keepAlive)      clearInterval(keepAlive);
       hls?.destroy();
       video.removeEventListener('play',  onPlay);
       video.removeEventListener('pause', onPause);
     };
   }, [src]);
 
-  // ── Prevent rewinding ────────────────────────────────────────────────────────
+  // ── Prevent rewinding ─────────────────────────────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -163,9 +166,7 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
       try {
         if (video.seekable.length > 0) {
           const liveEdge = video.seekable.end(video.seekable.length - 1);
-          if (liveEdge - video.currentTime > 5) {
-            video.currentTime = liveEdge;
-          }
+          if (liveEdge - video.currentTime > 5) video.currentTime = liveEdge;
         }
       } catch {}
     };
@@ -173,14 +174,14 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
     return () => video.removeEventListener('seeking', onSeeking);
   }, []);
 
-  // ── Fullscreen detection ─────────────────────────────────────────────────────
+  // ── Fullscreen detection ──────────────────────────────────────────────────
   useEffect(() => {
     const onFsChange = () => setIsFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // ── PiP detection ────────────────────────────────────────────────────────────
+  // ── PiP detection ─────────────────────────────────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -194,16 +195,23 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
     };
   }, []);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      video.muted = true; // ensure muted before manual play too
+      userPausedRef.current = false;
+      video.muted = true;
       video.play()
-        .then(() => setNeedClick(false))
+        .then(() => {
+          video.volume = volumeRef.current;
+          video.muted  = false;
+          setNeedClick(false);
+          setMuted(false);
+        })
         .catch(() => {});
     } else {
+      userPausedRef.current = true;
       video.pause();
     }
   }, []);
@@ -211,34 +219,30 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.muted = !video.muted;
-    setMuted(video.muted);
+    const next = !video.muted;
+    video.muted = next;
+    setMuted(next);
     setShowUnmute(false);
-    saveVolPrefs(video.volume, video.muted);
   }, []);
 
   const unmute = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    const { vol } = loadVolPrefs();
-    const finalVol = vol > 0 ? vol : 1;
-    video.muted  = false;
-    video.volume = finalVol;
+    video.muted = false;
     setMuted(false);
-    setVolume(finalVol);
     setShowUnmute(false);
-    saveVolPrefs(finalVol, false);
   }, []);
 
   const changeVolume = useCallback((v: number) => {
     const video = videoRef.current;
     if (!video) return;
-    video.volume = v;
-    video.muted  = v === 0;
+    video.volume      = v;
+    video.muted       = v === 0;
+    volumeRef.current = v;
     setVolume(v);
     setMuted(v === 0);
     setShowUnmute(false);
-    saveVolPrefs(v, v === 0);
+    saveVol(v);
   }, []);
 
   const toggleFullscreen = useCallback(() => {
@@ -268,7 +272,6 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
         width: '100%', aspectRatio: '16 / 9',
       }}
     >
-      {/* autoPlay + muted as HTML attributes — most reliable autoplay in Chrome */}
       <video
         ref={videoRef}
         poster={poster}
@@ -277,7 +280,6 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
         playsInline
         style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
       />
-
 
       {/* Click-to-play — autoplay полностью заблокирован браузером */}
       {needClick && (
@@ -298,22 +300,29 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
         </button>
       )}
 
-      {/* Small "Enable sound" button — stream plays, just muted */}
+      {/* Twitch-style centered unmute overlay */}
       {showUnmute && !needClick && (
         <button
           onClick={unmute}
           style={{
-            position: 'absolute', top: 12, right: 12, zIndex: 20,
-            background: 'rgba(0,0,0,0.75)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: 8, cursor: 'pointer', color: '#fff',
-            padding: '7px 14px',
-            display: 'flex', alignItems: 'center', gap: 7,
-            fontSize: 13, fontWeight: 600,
+            position: 'absolute', inset: 0, zIndex: 20,
+            background: 'transparent',
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <MuteIcon />
-          Включить звук
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'rgba(0,0,0,0.7)',
+            border: '2px solid rgba(255,255,255,0.15)',
+            borderRadius: 12, padding: '12px 22px',
+            color: '#fff', fontSize: 15, fontWeight: 700,
+            animation: 'unmuteAppear 0.2s ease',
+            backdropFilter: 'blur(4px)',
+          }}>
+            <MuteIcon size={22} />
+            Включить звук
+          </span>
         </button>
       )}
 
@@ -333,7 +342,7 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
         </CtrlBtn>
         <input
           type="range" min={0} max={1} step={0.05}
-          value={volume}
+          value={muted ? 0 : volume}
           onChange={e => changeVolume(parseFloat(e.target.value))}
           style={{ width: 72, cursor: 'pointer', accentColor: '#33783e', flexShrink: 0 }}
         />
@@ -349,7 +358,10 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
         </CtrlBtn>
       </div>
 
-      <style>{`@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
+      <style>{`
+        @keyframes livePulse{0%,100%{opacity:1}50%{opacity:.25}}
+        @keyframes unmuteAppear{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
+      `}</style>
     </div>
   );
 }
@@ -383,9 +395,9 @@ function VolumeIcon() {
     </svg>
   );
 }
-function MuteIcon() {
+function MuteIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
     </svg>

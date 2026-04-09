@@ -6,33 +6,17 @@ Live broadcasting
 
 Бэкенд: Node.js + TypeScript + Express
 
-
-
-
-
 node-media-server — принимает RTMP поток от OBS на порту 1935
-
-
 
 FFmpeg — транскодирует RTMP в HLS сегменты на диске
 
-
-
 socket.io — WebSocket для чата и статуса трансляции
-
-
 
 .env — хранит STREAM_KEY для аутентификации администратора
 
 Фронтенд: React + TypeScript
 
-
-
-
-
 hls.js — воспроизводит HLS поток в браузере
-
-
 
 socket.io-client — подключается к чату и получает статус стрима
 
