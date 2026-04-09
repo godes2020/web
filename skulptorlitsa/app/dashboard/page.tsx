@@ -235,7 +235,7 @@ export default function DashboardPage() {
                 <p className="font-medium">{user?.email}</p>
               </div>
             </div>
-            <Button href="/profile" size="sm" variant="outline">Редактировать профиль</Button>
+            <Button href="/profile" size="sm" variant="secondary">Редактировать профиль</Button>
           </section>
 
           {/* Quick links */}
