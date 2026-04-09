@@ -133,8 +133,10 @@ function stopFFmpeg() {
     console.log('[FFmpeg] Транскодинг остановлен');
   }
 
-  // Страховка: убить все зависшие ffmpeg-процессы
-  try { spawn('pkill', ['-9', '-f', 'stream.m3u8'], { stdio: 'ignore' }); } catch {}
+  // Страховка: убить все зависшие ffmpeg-процессы (Linux/Mac)
+  if (process.platform !== 'win32') {
+    try { spawn('pkill', ['-9', '-f', 'stream.m3u8'], { stdio: 'ignore' }); } catch {}
+  }
 
   // Очистить старые сегменты
   cleanMediaDir();
