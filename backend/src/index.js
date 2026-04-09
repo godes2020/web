@@ -31,9 +31,10 @@ io.on('connection', (socket) => {
 
   socket.on('chat:message', (data) => {
     const msg = {
-      name: data.name || 'Аноним',
-      text: data.text,
-      time: new Date().toISOString(),
+      name:    data.name || 'Аноним',
+      text:    data.text,
+      time:    new Date().toISOString(),
+      replyTo: data.replyTo || null, // { name, text }
     };
     messageHistory.push(msg);
     if (messageHistory.length > MAX_HISTORY) messageHistory.shift();
