@@ -92,7 +92,7 @@ export default function ChatBox({ online }: Props) {
   useEffect(() => { nameRef.current = name; }, [name]);
 
   useEffect(() => {
-    if (!name || !online) {
+    if (!name) {
       socketRef.current?.disconnect();
       socketRef.current = null;
       return;
@@ -114,6 +114,11 @@ export default function ChatBox({ online }: Props) {
         replyTo: data.replyTo || null,
         status:  'confirmed',
         nonce:   data.nonce   || undefined,
+      });
+
+      socket.on('chat:reset', () => {
+        pendingRef.current = [];
+        setMessages([]);
       });
 
       // Reconnect — resend pending queue
@@ -153,7 +158,7 @@ export default function ChatBox({ online }: Props) {
     })();
 
     return () => { socketRef.current?.disconnect(); socketRef.current = null; };
-  }, [name, online]);
+  }, [name]);
 
   // Автоскролл
   useEffect(() => {
@@ -360,7 +365,7 @@ export default function ChatBox({ online }: Props) {
               </div>
 
               {/* Кнопка "Ответить" */}
-              {online && m.status === 'confirmed' && (
+              {m.status === 'confirmed' && (
                 <button
                   onClick={() => startReply(m)}
                   style={{
@@ -418,30 +423,24 @@ export default function ChatBox({ online }: Props) {
           )}
 
           <div className="p-4">
-            {online ? (
-              <div className="flex gap-2">
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') send(e); }}
-                  placeholder={replyTo ? `Ответить ${replyTo.name}...` : 'Написать сообщение...'}
-                  maxLength={300}
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2
-                             text-sm text-black focus:outline-none focus:border-[#33783e]
-                             bg-white min-h-[44px]"
-                />
-                <button onClick={e => send(e)}
-                  className="bg-[#33783e] text-white px-4 py-2 rounded-lg
-                             hover:bg-[#2a6234] transition-colors text-sm font-medium min-h-[44px]">
-                  →
-                </button>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 text-center">
-                Чат недоступен — трансляция офлайн
-              </p>
-            )}
+            <div className="flex gap-2">
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') send(e); }}
+                placeholder={replyTo ? `Ответить ${replyTo.name}...` : 'Написать сообщение...'}
+                maxLength={300}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2
+                           text-sm text-black focus:outline-none focus:border-[#33783e]
+                           bg-white min-h-[44px]"
+              />
+              <button onClick={e => send(e)}
+                className="bg-[#33783e] text-white px-4 py-2 rounded-lg
+                           hover:bg-[#2a6234] transition-colors text-sm font-medium min-h-[44px]">
+                →
+              </button>
+            </div>
           </div>
         </div>
       )}

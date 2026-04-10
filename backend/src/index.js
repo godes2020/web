@@ -15,11 +15,23 @@ const io = new Server(server, {
   },
 });
 
-const messageHistory = [];
+let messageHistory = [];
 const MAX_HISTORY = 50;
 let viewerCount = 0;
 
 const broadcastViewers = () => io.emit('stream:viewers', { count: viewerCount });
+
+function scheduleReset() {
+  const now  = new Date();
+  const next = new Date();
+  next.setUTCHours(1, 0, 0, 0); // 4:00 МСК = 01:00 UTC
+  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  setTimeout(() => {
+    messageHistory = [];
+    io.emit('chat:reset');
+    scheduleReset();
+  }, next - now);
+}
 
 io.on('connection', (socket) => {
   viewerCount++;
@@ -53,4 +65,5 @@ server.listen(PORT, () => {
   console.log(`Режим: ${process.env.NODE_ENV}`);
 
   startStreamServer(io);
+  scheduleReset();
 });
