@@ -17,9 +17,9 @@ const io = new Server(server, {
 
 let messageHistory = [];
 const MAX_HISTORY = 50;
-let viewerCount = 0;
+const viewers = new Set(); // только те кто на /live
 
-const broadcastViewers = () => io.emit('stream:viewers', { count: viewerCount });
+const broadcastViewers = () => io.emit('stream:viewers', { count: viewers.size });
 
 function scheduleReset() {
   const now  = new Date();
@@ -34,12 +34,21 @@ function scheduleReset() {
 }
 
 io.on('connection', (socket) => {
-  viewerCount++;
-  broadcastViewers();
-
   socket.emit('stream:status', getStreamStatus());
   socket.emit('chat:history', messageHistory);
-  socket.emit('stream:viewers', { count: viewerCount });
+  socket.emit('stream:viewers', { count: viewers.size });
+
+  // Клиент сообщает что открыл страницу /live
+  socket.on('viewer:join', () => {
+    viewers.add(socket.id);
+    broadcastViewers();
+  });
+
+  // Клиент сообщает что ушёл со страницы /live
+  socket.on('viewer:leave', () => {
+    viewers.delete(socket.id);
+    broadcastViewers();
+  });
 
   socket.on('chat:message', (data) => {
     const msg = {
@@ -55,7 +64,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    viewerCount = Math.max(0, viewerCount - 1);
+    viewers.delete(socket.id);
     broadcastViewers();
   });
 });

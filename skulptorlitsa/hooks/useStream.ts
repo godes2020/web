@@ -9,7 +9,7 @@ interface StreamStatus {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
-export function useStream() {
+export function useStream(isLivePage = false) {
   const [status, setStatus]   = useState<StreamStatus>({ online: false, startedAt: null });
   const [viewers, setViewers] = useState(0);
 
@@ -22,10 +22,17 @@ export function useStream() {
 
       socket.on('stream:status',  (data: StreamStatus)      => setStatus(data));
       socket.on('stream:viewers', (data: { count: number }) => setViewers(data.count));
+
+      if (isLivePage) {
+        socket.emit('viewer:join');
+      }
     })();
 
-    return () => { socket?.disconnect(); };
-  }, []);
+    return () => {
+      if (isLivePage) socket?.emit('viewer:leave');
+      socket?.disconnect();
+    };
+  }, [isLivePage]);
 
   return { ...status, viewers };
 }

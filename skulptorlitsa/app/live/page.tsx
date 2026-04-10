@@ -28,7 +28,7 @@ function IconEye() {
 }
 
 export default function LivePage() {
-  const { online, startedAt, viewers } = useStream();
+  const { online, startedAt, viewers } = useStream(true);
 
   return (
     <main className="py-8">
