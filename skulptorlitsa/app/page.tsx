@@ -59,7 +59,7 @@ export default function HomePage() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-4 animate-fade-up delay-500">
+              <div className="flex flex-wrap gap-4 animate-fade-up delay-500 pb-6 md:pb-0">
                 <Button href="/courses" size="lg"
                   className="!text-white"
                   style={{ background: 'linear-gradient(135deg, #bf9244 0%, #e0c584 50%, #bf9244 100%)', backgroundSize: '200% 200%' }}>
@@ -95,8 +95,8 @@ export default function HomePage() {
 
       {/* UPCOMING STREAM BANNER */}
       {upcomingStream && (
-        <section className="bg-[#ead4a1] border-y-2 border-[#bf9244]" style={{ minHeight: 110, display: 'flex', alignItems: 'center' }}>
-          <div className="container py-6">
+        <section className="bg-[#ead4a1] border-y-2 border-[#bf9244]" style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="container" style={{ paddingTop: 40, paddingBottom: 40 }}>
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-center sm:text-left">
                 <span className="bg-[#a3212a] text-white text-xs font-bold px-3 py-1 rounded mr-2">
@@ -106,7 +106,7 @@ export default function HomePage() {
               </div>
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <CountdownTimer targetDate={new Date(upcomingStream.startAt)} />
-                <Button href={`/streams/${upcomingStream.id}`} size="sm">Подключиться</Button>
+                <Button href={`/streams/${upcomingStream.id}`} size="sm" style={{ color: '#ffffff' }}>Подключиться</Button>
               </div>
             </div>
           </div>
