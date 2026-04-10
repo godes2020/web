@@ -277,7 +277,9 @@ export default function HomePage() {
         <div className="container max-w-2xl">
           <h2 className="text-white mb-4 text-3xl font-bold">Начните путь к молодости сегодня</h2>
           <p className="text-white/80 mb-8 text-xl">Первые результаты уже через 2 недели регулярных занятий</p>
-          <Button href="/courses" size="lg" className="!bg-[#bf9244] !text-[#0b140c] hover:!bg-[#e0c584]">
+          <Button href="/courses" size="lg"
+            className="!text-white"
+            style={{ background: 'linear-gradient(135deg, #bf9244 0%, #e0c584 50%, #bf9244 100%)', backgroundSize: '200% 200%' }}>
             Выбрать курс
           </Button>
         </div>

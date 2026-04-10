@@ -247,10 +247,16 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
 
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
+    const video = videoRef.current;
     if (!el) return;
-    document.fullscreenElement
-      ? document.exitFullscreen().catch(() => {})
-      : el.requestFullscreen().catch(() => {});
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    } else if ((video as any)?.webkitEnterFullscreen) {
+      // iOS Safari fallback
+      (video as any).webkitEnterFullscreen();
+    }
   }, []);
 
   const togglePip = useCallback(async () => {
@@ -348,10 +354,6 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
         />
 
         <div style={{ flex: 1 }} />
-
-        <CtrlBtn onClick={togglePip} title="Картинка в картинке">
-          <PipIcon active={isPip} />
-        </CtrlBtn>
 
         <CtrlBtn onClick={toggleFullscreen} title={isFs ? 'Выйти из полного экрана' : 'На весь экран'}>
           {isFs ? <ExitFsIcon /> : <FsIcon />}
