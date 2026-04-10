@@ -2,7 +2,7 @@ require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./app');
-const { startStreamServer, getStreamStatus } = require('./services/stream');
+const { startStreamServer, getStreamStatus, cleanMediaDir } = require('./services/stream');
 
 const PORT = process.env.PORT || 4000;
 
@@ -60,10 +60,19 @@ io.on('connection', (socket) => {
   });
 });
 
+// Чистить HLS файлы при завершении процесса (PM2 restart, Ctrl+C, kill)
+function shutdown() {
+  cleanMediaDir();
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT',  shutdown);
+
 server.listen(PORT, () => {
   console.log(`Сервер запущен: http://localhost:${PORT}`);
   console.log(`Режим: ${process.env.NODE_ENV}`);
 
+  cleanMediaDir(); // убрать мусор от предыдущего краша
   startStreamServer(io);
   scheduleReset();
 });
