@@ -181,6 +181,28 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // ── Auto fullscreen on landscape rotation (mobile) ────────────────────────
+  useEffect(() => {
+    const onOrientationChange = () => {
+      const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+      const el = containerRef.current;
+      const video = videoRef.current;
+      if (isLandscape) {
+        if (el?.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
+        } else if ((video as any)?.webkitEnterFullscreen) {
+          (video as any).webkitEnterFullscreen();
+        }
+      } else {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('orientationchange', onOrientationChange);
+    return () => window.removeEventListener('orientationchange', onOrientationChange);
+  }, []);
+
   // ── PiP detection ─────────────────────────────────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
