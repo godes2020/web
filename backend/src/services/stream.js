@@ -154,4 +154,4 @@ function cleanMediaDir() {
   }
 }
 
-module.exports = { startStreamServer, getStreamStatus };
+module.exports = { startStreamServer, getStreamStatus, cleanMediaDir };
