@@ -38,7 +38,6 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
   const [muted, setMuted]           = useState(false);
   const [needClick, setNeedClick]   = useState(false);
   const [showUnmute, setShowUnmute] = useState(false);
-  const [isPip, setIsPip]           = useState(false);
   const [isFs, setIsFs]             = useState(false);
 
   const volumeRef     = useRef(1);
@@ -204,19 +203,6 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
     return () => window.removeEventListener('orientationchange', onOrientationChange);
   }, []);
 
-  // ── PiP detection ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const onEnter = () => setIsPip(true);
-    const onLeave = () => setIsPip(false);
-    video.addEventListener('enterpictureinpicture', onEnter);
-    video.addEventListener('leavepictureinpicture', onLeave);
-    return () => {
-      video.removeEventListener('enterpictureinpicture', onEnter);
-      video.removeEventListener('leavepictureinpicture', onLeave);
-    };
-  }, []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const togglePlay = useCallback(() => {
@@ -273,28 +259,24 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
     const video = videoRef.current;
     if (!el || !video) return;
 
-    const isIos = (video as any).webkitEnterFullscreen !== undefined && !el.requestFullscreen;
     const inFs = document.fullscreenElement || (video as any).webkitDisplayingFullscreen;
 
     if (inFs) {
       if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
       else if ((video as any).webkitExitFullscreen) (video as any).webkitExitFullscreen();
-    } else if (isIos) {
+      return;
+    }
+
+    // Пробуем стандартный API, при ошибке — iOS webkit fallback
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {
+        if ((video as any).webkitEnterFullscreen) (video as any).webkitEnterFullscreen();
+      });
+    } else if ((video as any).webkitEnterFullscreen) {
       (video as any).webkitEnterFullscreen();
-    } else {
-      el.requestFullscreen().catch(() => {});
     }
   }, []);
 
-  const togglePip = useCallback(async () => {
-    const video = videoRef.current;
-    if (!video) return;
-    try {
-      document.pictureInPictureElement
-        ? await document.exitPictureInPicture()
-        : await video.requestPictureInPicture();
-    } catch {}
-  }, []);
 
   return (
     <div
@@ -445,14 +427,6 @@ function ExitFsIcon() {
     <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="8 3 3 3 3 8" /><polyline points="21 8 21 3 16 3" />
       <polyline points="3 16 3 21 8 21" /><polyline points="16 21 21 21 21 16" />
-    </svg>
-  );
-}
-function PipIcon({ active }: { active: boolean }) {
-  return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="4" width="20" height="16" rx="2" />
-      <rect x="12" y="12" width="8" height="6" rx="1" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
