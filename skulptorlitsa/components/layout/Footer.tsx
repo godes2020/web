@@ -43,9 +43,9 @@ export default function Footer() {
             <ul className="space-y-3 text-sm">
               <li style={{ color: 'rgba(255,255,255,0.85)' }}>
                 ВКонтакте:{' '}
-                <a href="https://vk.com/skulptorlitsa" target="_blank" rel="noopener noreferrer"
+                <a href="https://vk.me/sculptorlitsa" target="_blank" rel="noopener noreferrer"
                   style={{ color: '#e0c584' }} className="hover:underline">
-                  vk.com/skulptorlitsa
+                  vk.me/sculptorlitsa
                 </a>
               </li>
               <li style={{ color: 'rgba(255,255,255,0.85)' }}>
