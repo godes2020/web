@@ -106,7 +106,7 @@ export default function HomePage() {
               </div>
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <CountdownTimer targetDate={new Date(upcomingStream.startAt)} />
-                <Button href={`/streams/${upcomingStream.id}`} size="sm" style={{ color: '#ffffff' }}>Подключиться</Button>
+                <Button href="/live" size="sm" style={{ color: '#ffffff' }}>Подключиться</Button>
               </div>
             </div>
           </div>

@@ -71,6 +71,13 @@ export default function Header() {
             ))}
           </nav>
 
+          {/* Live button — desktop */}
+          <Link href="/live" className="hidden md:flex items-center gap-1.5 no-underline hover:no-underline rounded-full px-4 py-1.5 font-semibold text-sm transition-all duration-200 flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1.5px solid rgba(255,255,255,0.35)' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ff4444', display: 'inline-block', boxShadow: '0 0 6px #ff4444' }} />
+            Эфир
+          </Link>
+
           {/* Auth — desktop */}
           <div className="hidden md:flex items-center gap-3 flex-shrink-0">
             {isAuthenticated ? (
@@ -144,6 +151,12 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
+            <Link href="/live" className="no-underline hover:no-underline flex items-center gap-2 rounded-lg transition-all duration-200"
+              style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 500, fontSize: '16px', padding: '11px 12px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ff4444', display: 'inline-block', boxShadow: '0 0 6px #ff4444' }} />
+              Эфир
+            </Link>
+
             <div className="pt-3 mt-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.15)' }}>
               {isAuthenticated ? (
                 <div className="flex items-center justify-between px-3">
