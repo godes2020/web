@@ -187,16 +187,17 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
       const isLandscape = window.matchMedia('(orientation: landscape)').matches;
       const el = containerRef.current;
       const video = videoRef.current;
+      if (!el || !video) return;
+      const isIos = (video as any).webkitEnterFullscreen !== undefined && !el.requestFullscreen;
       if (isLandscape) {
-        if (el?.requestFullscreen) {
-          el.requestFullscreen().catch(() => {});
-        } else if ((video as any)?.webkitEnterFullscreen) {
+        if (isIos) {
           (video as any).webkitEnterFullscreen();
+        } else if (el.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
         }
       } else {
-        if (document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
-        }
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else if ((video as any).webkitDisplayingFullscreen) (video as any).webkitExitFullscreen?.();
       }
     };
     window.addEventListener('orientationchange', onOrientationChange);
@@ -270,14 +271,18 @@ export default function HlsPlayer({ src, poster, isLive }: Props) {
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
     const video = videoRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => {});
-    } else if ((video as any)?.webkitEnterFullscreen) {
-      // iOS Safari fallback
+    if (!el || !video) return;
+
+    const isIos = (video as any).webkitEnterFullscreen !== undefined && !el.requestFullscreen;
+    const inFs = document.fullscreenElement || (video as any).webkitDisplayingFullscreen;
+
+    if (inFs) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if ((video as any).webkitExitFullscreen) (video as any).webkitExitFullscreen();
+    } else if (isIos) {
       (video as any).webkitEnterFullscreen();
+    } else {
+      el.requestFullscreen().catch(() => {});
     }
   }, []);
 
